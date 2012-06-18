@@ -1,0 +1,19 @@
+# This is a comment
+customers:
+- id: 1, name: "Customer name", created: $now, updated: $now
+
+orders:
+- id: 1, customer_id: 1, created: $now
+
+order_lines:
+? order_id: 1, created: $now, updated: $now
+- id: 1, quantity: 1, description: "Singleton item", item_code: "SINGLETON"
+- id: 2, quantity: 2, description: "Items with no code"
+
+orders:
+- id: 2, customer_id: 1, created: $now
+
+order_lines:
+? order_id: 2, created: $now, updated: $now
+- id: 3, quantity: 1, description: "Singleton item", item_code: "SINGLETON"
+- id: 4, quantity: 2, description: "Items with no code"
