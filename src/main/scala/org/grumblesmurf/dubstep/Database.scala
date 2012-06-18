@@ -6,7 +6,6 @@ import Utilities._
 import org.apache.commons.io.IOUtils
 
 sealed abstract class Database {
-  val name: String
   val dialect: DatabaseDialect
   val schemaDefinition: Option[String]
 
@@ -115,7 +114,7 @@ case class DatabaseStructure(tables: Map[String, Map[String, (Int, Boolean)]]) {
   }
 }
 
-case class SimpleDatabase(name: String, username: String, password: String, uri: String, schemaDefinition: Option[String] = None)
+case class SimpleDatabase(username: String, password: String, uri: String, schemaDefinition: Option[String] = None)
                          (implicit val dialect: DatabaseDialect) extends Database {
   Class.forName(dialect.driverClassname)
 
@@ -124,7 +123,7 @@ case class SimpleDatabase(name: String, username: String, password: String, uri:
   }
 }
 
-case class DataSourceDatabase(name: String, dataSource: DataSource, schemaDefinition: Option[String] = None)
+case class DataSourceDatabase(dataSource: DataSource, schemaDefinition: Option[String] = None)
                              (implicit val dialect: DatabaseDialect) extends Database {
   protected def connect(): Connection = {
     dataSource.getConnection
