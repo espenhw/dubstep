@@ -85,8 +85,8 @@ sealed abstract class Database {
       case Some(tuple) => tuple
     }
 
-    val tables = columns.groupBy(_._1) map { x =>
-      (x._1 -> (Map.empty[String, (Int, Boolean)] ++ (x._2 map { _._2 })))
+    val tables = columns.groupBy(_._1) map { case (table, cols) =>
+      (table -> (Map.empty ++ (cols map { _._2 })))
     }
     DatabaseStructure(tables)
   }
