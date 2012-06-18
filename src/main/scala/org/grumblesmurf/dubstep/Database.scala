@@ -55,7 +55,7 @@ sealed abstract class Database {
           rowSet.rows.foreach { row =>
             val data = rowSet.defaults.map(_.data).getOrElse(Map.empty) ++ row.data
 
-            meta.tables(rowSet.table).zipWithIndex.map { case ((column, (sqlType, _)), idx) =>
+            meta.tables(rowSet.table).zipWithIndex.foreach { case ((column, (sqlType, _)), idx) =>
               ps.setObject(idx + 1, data.get(column).orNull, sqlType)
             }
             ps.executeUpdate()
