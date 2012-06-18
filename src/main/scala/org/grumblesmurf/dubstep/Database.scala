@@ -125,7 +125,7 @@ sealed abstract class Database {
     }
   }
 
-  protected def connect(): Connection
+  def connect(): Connection
 }
 
 case class Table(name: String, primaryKey: Option[Seq[String]], columns: Map[String, (Int, Boolean)]) {
@@ -150,14 +150,14 @@ case class SimpleDatabase(username: String, password: String, uri: String, schem
                          (implicit val dialect: DatabaseDialect) extends Database {
   Class.forName(dialect.driverClassname)
 
-  protected def connect(): Connection = {
+  def connect(): Connection = {
     DriverManager.getConnection(uri, username, password)
   }
 }
 
 case class DataSourceDatabase(dataSource: DataSource, schemaDefinition: Option[String] = None)
                              (implicit val dialect: DatabaseDialect) extends Database {
-  protected def connect(): Connection = {
+  def connect(): Connection = {
     dataSource.getConnection
   }
 }

@@ -17,8 +17,10 @@
 package test
 
 import org.grumblesmurf.dubstep._
+import org.grumblesmurf.dubstep.Utilities._
+import org.hamcrest.CoreMatchers._
+import org.junit.Assert.assertThat
 import org.junit.Test
-import scala.Some
 
 class H2Test {
   implicit val dbDialect = H2
@@ -26,6 +28,16 @@ class H2Test {
 
   @Test
   def loadTestData() {
-    loadData(DbtDataset("/testdata.dbt"))
+    val dataset = DbtDataset("/testdata.dbt")
+    loadData(dataset)
+
+    withConnection(db.connect()) { connection =>
+      withStatement(connection) { st =>
+        assertThat(
+          st.executeQuery("select count(1) from order_lines").map(_.getInt(1)).head,
+          is(dataset.rowSets.groupBy(_.tableName)("order_lines").map(_.rows.size).sum)
+        )
+      }
+    }
   }
 }
