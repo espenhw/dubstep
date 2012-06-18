@@ -39,10 +39,10 @@ sealed abstract class Database {
         schemaLoaded = true
       }
 
-      val affectedTables = dataset.rowSets.map(_.table)
+      val affectedTables = dataset.rowSets.map(rs => meta.table(rs.tableName))
 
       val inserts: Map[String, PreparedStatement] = Map.empty ++ (affectedTables map { table =>
-        (table -> connection.prepareStatement(meta.insertStatementFor(table)))
+        (table.name -> connection.prepareStatement(table.insertStatement))
       })
 
       inTransaction(connection) {
@@ -51,13 +51,13 @@ sealed abstract class Database {
 
       inTransaction(connection) {
         dataset.rowSets.foreach { rowSet =>
-          val ps = inserts(rowSet.table)
+          val ps = inserts(rowSet.tableName)
           rowSet.rows.foreach { row =>
             val data = rowSet.defaults.map(_.data).getOrElse(Map.empty) ++ row.data
 
-            meta.tables(rowSet.table).zipWithIndex.foreach { case ((column, (sqlType, _)), idx) =>
-              ps.setObject(idx + 1, data.get(column).orNull, sqlType)
-            }
+            meta.table(rowSet.tableName).columns.zipWithIndex.foreach { case ((column, (sqlType, _)), idx) =>
+                ps.setObject(idx + 1, data.get(column).orNull, sqlType)
+              }
             ps.executeUpdate()
           }
         }
@@ -71,7 +71,18 @@ sealed abstract class Database {
       rs.getString("TABLE_NAME").toLowerCase
     }.toSet
 
-    val columns = dmd.getColumns(null, null, "%", "%").map { rs =>
+    val primaryKeys = dmd.getPrimaryKeys(null, null, "%").flatMap { rs =>
+      val table = rs.getString("TABLE_NAME")
+      if (realTables(table)) {
+        Some(table -> (rs.getInt("KEY_SEQ") -> rs.getString("COLUMN_NAME")))
+      } else {
+        None
+      }
+    }.groupBy(_._1).map { case (table, pkCols) =>
+      (table -> pkCols.map(_._2).toSeq.sortBy(_._1).map(_._2))
+    }
+
+    val tableColumns = dmd.getColumns(null, null, "%", "%").flatMap { rs =>
       val table = rs.getString("TABLE_NAME").toLowerCase
       if (realTables(table)) {
         val column = rs.getString("COLUMN_NAME").toLowerCase
@@ -81,13 +92,14 @@ sealed abstract class Database {
       } else {
         None
       }
-    }.collect {
-      case Some(tuple) => tuple
-    }
-
-    val tables = columns.groupBy(_._1) map { case (table, cols) =>
+    }.groupBy(_._1) map { case (table, cols) =>
       (table -> (Map.empty ++ (cols map { _._2 })))
     }
+
+    val tables = realTables.map { table =>
+      Table(table, primaryKeys.get(table), tableColumns(table))
+    }
+
     DatabaseStructure(tables)
   }
 
@@ -116,17 +128,21 @@ sealed abstract class Database {
   protected def connect(): Connection
 }
 
-case class DatabaseStructure(tables: Map[String, Map[String, (Int, Boolean)]]) {
-  def insertStatementFor(table: String): String = {
-    """insert into %s (%s) values (%s)""" format (
-      table,
-      tables(table).keys mkString ",",
-      tables(table) map Function.const("?") mkString ","
-      )
-  }
+case class Table(name: String, primaryKey: Option[Seq[String]], columns: Map[String, (Int, Boolean)]) {
+  lazy val autoIncrementColumns = columns.collect { case (column, (_, true)) => column }.toSet
 
-  def autoIncrementColumnsOf(table: String): Set[String] = {
-    tables(table).collect { case (column, (_, true)) => column }.toSet
+  lazy val insertStatement = "insert into %s (%s) values (%s)" format (
+    name,
+    columns.keys mkString ",",
+    columns map Function.const("?") mkString ","
+    )
+}
+
+case class DatabaseStructure(tables: Set[Table]) {
+  private val tableMap = Map.empty ++ tables.map { t => t.name -> t}
+
+  def table(name: String): Table = {
+    tableMap.get(name).getOrElse(throw new IllegalArgumentException("Table " + name + " does not exist"))
   }
 }
 

@@ -27,7 +27,7 @@ abstract class Dataset {
   val dataFile: String
 }
 
-case class RowSet(table: String, defaults: Option[Row], rows: Seq[Row])
+case class RowSet(tableName: String, defaults: Option[Row], rows: Seq[Row])
 
 case class Row(data: Map[String, Any])
 

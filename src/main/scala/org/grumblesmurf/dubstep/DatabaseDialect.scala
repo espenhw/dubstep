@@ -30,14 +30,14 @@ abstract class DatabaseDialect {
     * @param connection connection to operate in
     * @param meta a representation of the database structure
     */
-  def truncateTables(tables: Seq[String], connection: Connection, meta: DatabaseStructure)
+  def truncateTables(tables: Seq[Table], connection: Connection, meta: DatabaseStructure)
 
   /** Update autoincrement of `tables` if necessary so that subsequent inserts will work.
     * @param tables tables to delete from
     * @param connection connection to operate in
     * @param meta a representation of the database structure
     */
-  def updateAutoincrements(tables: Seq[String], connection: Connection, meta: DatabaseStructure)
+  def updateAutoincrements(tables: Seq[Table], connection: Connection, meta: DatabaseStructure)
 
   /** Clear the database; that is, drop everything in preparation for reloading the schema.  This implementation
     * does `DROP TABLE t1, t2, t3... CASCADE` (works on at least H2 and PostgreSQL).
@@ -47,7 +47,7 @@ abstract class DatabaseDialect {
   def clearDatabase(connection: Connection, meta: DatabaseStructure) {
     if (meta.tables.nonEmpty) {
       withStatement(connection) { st =>
-        st.execute("DROP TABLE %s CASCADE" format (meta.tables.keys.mkString(",")))
+        st.execute("DROP TABLE %s CASCADE" format (meta.tables.map(_.name).mkString(",")))
       }
     }
   }
@@ -63,10 +63,10 @@ abstract class NaiveDatabaseDialect extends DatabaseDialect {
     * @param tables tables to delete from
     * @param connection connection to operate in
     */
-  def truncateTables(tables: Seq[String], connection: Connection, meta: DatabaseStructure) {
+  def truncateTables(tables: Seq[Table], connection: Connection, meta: DatabaseStructure) {
     withStatement(connection) { st =>
       tables foreach { t =>
-        st.executeUpdate("DELETE FROM " + t)
+        st.executeUpdate("DELETE FROM " + t.name)
       }
     }
   }
@@ -76,24 +76,24 @@ abstract class NaiveDatabaseDialect extends DatabaseDialect {
     * @param tables ignored
     * @param connection ignored
     */
-  def updateAutoincrements(tables: Seq[String], connection: Connection, meta: DatabaseStructure) {
+  def updateAutoincrements(tables: Seq[Table], connection: Connection, meta: DatabaseStructure) {
   }
 }
 
 object H2 extends NaiveDatabaseDialect {
   val driverClassname = "org.h2.Driver"
 
-  override def truncateTables(tables: Seq[String], connection: Connection, meta: DatabaseStructure) {
+  override def truncateTables(tables: Seq[Table], connection: Connection, meta: DatabaseStructure) {
     super.truncateTables(tables, connection, meta)
 
     updateAutoincrementColumns(connection, tables, meta) { (_, _, _) => 1L }
   }
 
-  private def updateAutoincrementColumns(connection: Connection, tables: scala.Seq[String], meta: DatabaseStructure)(nextValue: (Statement, String, String) => Long) {
+  private def updateAutoincrementColumns(connection: Connection, tables: Seq[Table], meta: DatabaseStructure)(nextValue: (Statement, String, String) => Long) {
     withStatement(connection) { st =>
       tables foreach { t =>
-        meta.autoIncrementColumnsOf(t) foreach { c =>
-          st.executeUpdate("ALTER TABLE %1$s ALTER COLUMN %2$s RESTART WITH %3$d" format(t, c, nextValue(st, t, c)))
+        t.autoIncrementColumns foreach { c =>
+          st.executeUpdate("ALTER TABLE %1$s ALTER COLUMN %2$s RESTART WITH %3$d" format(t.name, c, nextValue(st, t.name, c)))
         }
       }
     }
@@ -103,7 +103,7 @@ object H2 extends NaiveDatabaseDialect {
     * @param tables tables to delete from
     * @param connection connection to operate in
     */
-  override def updateAutoincrements(tables: Seq[String], connection: Connection, meta: DatabaseStructure) {
+  override def updateAutoincrements(tables: Seq[Table], connection: Connection, meta: DatabaseStructure) {
     updateAutoincrementColumns(connection, tables, meta) { (st, table, column) =>
       st.executeQuery("SELECT MAX(%2$s) + 1 FROM %1$s" format (table, column)).map(_.getLong(1)).head
     }
@@ -113,17 +113,17 @@ object H2 extends NaiveDatabaseDialect {
 object PostgreSQL extends DatabaseDialect {
   val driverClassname = "org.postgresql.Driver"
 
-  def truncateTables(tables: Seq[String], connection: Connection, meta: DatabaseStructure) {
+  def truncateTables(tables: Seq[Table], connection: Connection, meta: DatabaseStructure) {
     withStatement(connection) { st =>
-      st.executeUpdate("TRUNCATE TABLE %s RESTART IDENTITY" format (tables mkString ","))
+      st.executeUpdate("TRUNCATE TABLE %s RESTART IDENTITY" format (tables.map(_.name) mkString ","))
     }
   }
 
-  def updateAutoincrements(tables: Seq[String], connection: Connection, meta: DatabaseStructure) {
+  def updateAutoincrements(tables: Seq[Table], connection: Connection, meta: DatabaseStructure) {
     withStatement(connection) { st =>
       tables foreach { t =>
-        meta.autoIncrementColumnsOf(t) foreach { c =>
-          st.execute("SELECT pg_catalog.setval(pg_get_serial_sequence('%1$s', '%2$s'), (SELECT MAX(%2$s) FROM %1$s))" format(t, c))
+        t.autoIncrementColumns foreach { c =>
+          st.execute("SELECT pg_catalog.setval(pg_get_serial_sequence('%1$s', '%2$s'), (SELECT MAX(%2$s) FROM %1$s))" format(t.name, c))
         }
       }
     }
