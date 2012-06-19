@@ -38,9 +38,23 @@ Dubstep is centered around datasets.  A dataset has a reference to a data file (
 A database, in turn, knows how to connect and knows its dialect (e.g. H2 or PostgreSQL); in addition, it can optionally
 have a reference to a schema definition (again, currently a classpath resource).
 
+## Using Dubstep
+
+### Reference the beast
+
+In your SBT build descriptor:
+
+```
+resolvers += Resolver.url("grumblesmurf", url("http://maven.grumblesmurf.org/"))(Resolver.ivyStylePatterns)
+
+libraryDependencies += "org.grumblesmurf" %% "dubstep" % "0.1-SNAPSHOT" % "it" // Or "test"
+```
+
+You can then `import org.grumblesmurf.dubstep._`.
+
 ### Loading data
 
-You can tell Dubstep to `org.grumblesmurf.dubstep.loadData(dataset)`.  That will:
+You can tell Dubstep to `loadData(dataset)`.  That will:
 
 1.  Check the whether dataset's database has had its schema loaded (if it has one).  If not, it will drop all tables in
     the database and load the supplied schema definition.  Incidentally, this is remembered by the database object - thus,
@@ -54,7 +68,7 @@ You can tell Dubstep to `org.grumblesmurf.dubstep.loadData(dataset)`.  That will
 
 ### Checking data
 
-After your code has run you can ask Dubstep to `org.grumblesmurf.dubstep.checkData(dataset)`.  That will:
+After your code has run you can ask Dubstep to `checkData(dataset)`.  That will:
 
 1.  Try to match the rows in the dataset with the ones in the database (using primary keys) and collect any mismatches.
 
