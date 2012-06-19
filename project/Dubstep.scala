@@ -29,6 +29,7 @@ object Dubstep extends Build {
         "com.h2database" % "h2" % "1.3.167"
       ).map(_.copy(configurations=Some("test,it"))),
       (testFrameworks in IntegrationTest) += TestFrameworks.JUnit,
+      (testOptions in IntegrationTest) += Tests.Argument(TestFrameworks.JUnit, "-v"),
       (parallelExecution in IntegrationTest) := false
     ) : _*)
 

@@ -20,16 +20,92 @@ import java.sql.{Array => _, _}
 import javax.sql.DataSource
 import Utilities._
 import org.apache.commons.io.IOUtils
+import scala.collection.mutable
 
 sealed abstract class Database {
   val dialect: DatabaseDialect
+
   val schemaDefinition: Option[String]
 
   private[this] var schemaLoaded = false
+
   private[this] var meta: DatabaseStructure = _
 
-  private[dubstep] def check(dataset: Dataset) {
-    // TODO
+  private[dubstep] def check(dataset: Dataset): Iterable[Mismatch] = {
+    withConnection(connect()) { connection =>
+      loadMetadata(connection)
+
+      val expectedRows = dataset.rowSets.groupBy(_.tableName).map {
+        case (table, rowSets) =>
+          (table -> rowSets.flatMap { rs =>
+            rs.rows.map(r => r.withDefaultsFrom(rs))
+          })
+      }
+
+      val actualRows = loadRows(connection, expectedRows.keys)
+
+      expectedRows.keys.toSeq.sorted.flatMap { t => checkTable(meta.table(t), expectedRows(t), actualRows.getOrElse(t, Seq.empty)) }
+    }
+  }
+
+  private def checkTable(table: Table, expectedRows: Seq[Row], actualRows: Seq[Row]): Iterable[Mismatch] = {
+    val pk = table.primaryKey.getOrElse(throw new IllegalArgumentException("Dubstep cannot check %s, it has no primary key" format (table.name)))
+    def pkValues(row: Row) = {
+      pk.map(row(_))
+    }
+
+    val mismatches = mutable.Buffer.empty[Mismatch]
+
+    val extraActualRows = actualRows.toBuffer
+
+    val unmatchedRows = expectedRows.filterNot { expectedRow =>
+      val expectedRowPk = pkValues(expectedRow)
+      actualRows.find(pkValues(_) == expectedRowPk).map { actualRow =>
+        mismatches ++= expectedRow.data.flatMap { case (column, expectedValue) =>
+          val actualValue = actualRow(column)
+          if (expectedValue == actualValue) {
+            None
+          } else {
+            Some(expectedRowPk, column, expectedValue, actualValue)
+          }
+        }.groupBy(_._1).map { case (pkValue, tuples) =>
+          RowDataMismatch(table, pkValue, tuples.map { case (_, column, expected, actual) =>
+            ColumnMismatch(column, expected, actual)
+          })
+        }
+        extraActualRows -= actualRow
+        true
+      }.getOrElse(false)
+    }
+
+    def nonPrimaryKeyData(row: Row): Map[String, Any] = {
+      row.data -- table.primaryKey.getOrElse(Seq.empty)
+    }
+
+    mismatches ++= unmatchedRows.map { row =>
+      MissingRow(table, pkValues(row), nonPrimaryKeyData(row))
+    }
+
+    mismatches ++= extraActualRows.map { row =>
+      ExtraRow(table, pkValues(row), nonPrimaryKeyData(row))
+    }
+
+    mismatches.toSeq
+  }
+
+  private def loadRows(connection: Connection, tables: Iterable[String]): Map[String, Seq[Row]] = {
+    withStatement(connection) { st =>
+      Map.empty ++ tables.map { t =>
+        (t -> st.executeQuery("SELECT * FROM " + t).map { rs =>
+          val rsMeta = rs.getMetaData
+          val cols = rsMeta.getColumnCount
+
+          Row(Map.empty ++ (1 until (cols + 1)).map { n =>
+            (rsMeta.getColumnName(n).toLowerCase -> rs.getObject(n))
+          })
+        }.toSeq)
+      }
+    }
   }
 
   private[dubstep] def load(dataset: Dataset) {
@@ -53,10 +129,10 @@ sealed abstract class Database {
         dataset.rowSets.foreach { rowSet =>
           val ps = inserts(rowSet.tableName)
           rowSet.rows.foreach { row =>
-            val data = rowSet.defaults.map(_.data).getOrElse(Map.empty) ++ row.data
+            val augmentedRow = row.withDefaultsFrom(rowSet)
 
             meta.table(rowSet.tableName).columns.zipWithIndex.foreach { case ((column, (sqlType, _)), idx) =>
-                ps.setObject(idx + 1, data.get(column).orNull, sqlType)
+                ps.setObject(idx + 1, augmentedRow.get(column).orNull, sqlType)
               }
             ps.executeUpdate()
           }
@@ -68,22 +144,21 @@ sealed abstract class Database {
 
   private def interpretMetadata(dmd: DatabaseMetaData): DatabaseStructure = {
     val realTables = dmd.getTables(null, null, "%", Array("TABLE")).map { rs: ResultSet =>
-      rs.getString("TABLE_NAME").toLowerCase
+      rs.getString("TABLE_NAME")
     }.toSet
 
-    val primaryKeys = dmd.getPrimaryKeys(null, null, "%").flatMap { rs =>
-      val table = rs.getString("TABLE_NAME")
-      if (realTables(table)) {
-        Some(table -> (rs.getInt("KEY_SEQ") -> rs.getString("COLUMN_NAME")))
-      } else {
-        None
+    val primaryKeys: Map[String, Seq[String]] = realTables.map { table =>
+      val pkCols = dmd.getPrimaryKeys(null, null, table).map {
+        rs =>
+          val seq = rs.getInt("KEY_SEQ")
+          val col = rs.getString("COLUMN_NAME").toLowerCase
+          (seq -> col)
       }
-    }.groupBy(_._1).map { case (table, pkCols) =>
-      (table -> pkCols.map(_._2).toSeq.sortBy(_._1).map(_._2))
-    }
+      table -> (pkCols.toSeq.sortBy(_._1).map(_._2))
+    }.toMap
 
     val tableColumns = dmd.getColumns(null, null, "%", "%").flatMap { rs =>
-      val table = rs.getString("TABLE_NAME").toLowerCase
+      val table = rs.getString("TABLE_NAME")
       if (realTables(table)) {
         val column = rs.getString("COLUMN_NAME").toLowerCase
         val sqlType = rs.getInt("DATA_TYPE")
@@ -97,7 +172,7 @@ sealed abstract class Database {
     }
 
     val tables = realTables.map { table =>
-      Table(table, primaryKeys.get(table), tableColumns(table))
+      Table(table.toLowerCase, primaryKeys.get(table), tableColumns(table))
     }
 
     DatabaseStructure(tables)
@@ -113,7 +188,16 @@ sealed abstract class Database {
       }
     }
 
-    meta = interpretMetadata(connection.getMetaData)
+    loadMetadata(connection)
+  }
+
+  private def loadMetadata(connection: Connection) {
+    if (meta == null)
+      meta = interpretMetadata(connection.getMetaData)
+  }
+
+  def table(name: String): Option[Table] = {
+    Option(meta).map(_.table(name))
   }
 
   private def loadAsString(resource: String): String = {

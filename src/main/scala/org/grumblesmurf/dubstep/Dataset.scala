@@ -29,7 +29,20 @@ abstract class Dataset {
 
 case class RowSet(tableName: String, defaults: Option[Row], rows: Seq[Row])
 
-case class Row(data: Map[String, Any])
+case class Row(data: Map[String, Any]) {
+  def withDefaultsFrom(rowSet: RowSet): Row = {
+    val defaultData: Map[String, Any] = rowSet.defaults.map(_.data).getOrElse(Map.empty)
+    copy(data=defaultData ++ data)
+  }
+
+  def apply(column: String): Any = {
+    data(column)
+  }
+
+  def get(column: String): Option[Any] = {
+    data.get(column)
+  }
+}
 
 case class DbtDataset(dataFile: String)(implicit val database: Database) extends Dataset {
   def rowSets: Seq[RowSet] = {
@@ -65,7 +78,8 @@ object DbtParser extends JavaTokenParsers {
 
   private def value: Parser[Any] =
     stringLiteral ^^ (removeQuotes(_)) |
-      floatingPointNumber |
+      wholeNumber ^^ (_.toLong) |
+      floatingPointNumber ^^ (_.toDouble) |
       "true" ^^ (s => true) |
       "$true" ^^ (s => true) |
       "false" ^^ (s => false) |

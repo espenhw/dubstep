@@ -21,7 +21,10 @@ package object dubstep {
     (Seq(dataset) ++ moreDatasets).foreach(ds => ds.database.load(ds))
   }
 
-  def checkData(dataset: Dataset, moreDatasets: Dataset*) {
-    (Seq(dataset) ++ moreDatasets).foreach(ds => ds.database.check(ds))
+  def checkData(dataset: Dataset, moreDatasets: Dataset*): Option[Iterable[Mismatch]] = {
+    (Seq(dataset) ++ moreDatasets).flatMap(ds => ds.database.check(ds)) match {
+      case ms if ms.nonEmpty => Some(ms)
+      case _ => None
+    }
   }
 }

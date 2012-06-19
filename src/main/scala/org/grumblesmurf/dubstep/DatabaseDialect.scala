@@ -84,7 +84,15 @@ object H2 extends NaiveDatabaseDialect {
   val driverClassname = "org.h2.Driver"
 
   override def truncateTables(tables: Seq[Table], connection: Connection, meta: DatabaseStructure) {
+    withStatement(connection) { st =>
+      st.execute("SET REFERENTIAL_INTEGRITY FALSE")
+    }
+
     super.truncateTables(tables, connection, meta)
+
+    withStatement(connection) { st =>
+      st.execute("SET REFERENTIAL_INTEGRITY TRUE")
+    }
 
     updateAutoincrementColumns(connection, tables, meta) { (_, _, _) => 1L }
   }

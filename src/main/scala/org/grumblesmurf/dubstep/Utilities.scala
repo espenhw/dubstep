@@ -16,7 +16,7 @@
 
 package org.grumblesmurf.dubstep
 
-import java.sql.{ResultSet, Statement, Connection}
+import java.sql.{Timestamp, ResultSet, Statement, Connection}
 import scala.collection.mutable
 
 object Utilities {

@@ -16,37 +16,14 @@
 
 package test
 
-import org.junit.Test
-import org.grumblesmurf.dubstep.{DbtDataset, PostgreSQL, SimpleDatabase, loadData}
-import org.grumblesmurf.dubstep.Utilities._
-import org.grumblesmurf.dubstep.DbtDataset
-import scala.Some
-import org.grumblesmurf.dubstep.SimpleDatabase
-import org.junit.Assert._
-import org.grumblesmurf.dubstep.DbtDataset
-import scala.Some
-import org.grumblesmurf.dubstep.SimpleDatabase
-import org.hamcrest.CoreMatchers._
-import org.grumblesmurf.dubstep.DbtDataset
-import scala.Some
-import org.grumblesmurf.dubstep.SimpleDatabase
+import org.grumblesmurf.dubstep._
 
-class PostgresTest {
+
+class PostgresTest extends DubstepTests {
+  implicit val db = PostgresTest.db
+}
+
+object PostgresTest {
   implicit val dbDialect = PostgreSQL
-  implicit val db = SimpleDatabase("test", "test", "jdbc:postgresql:testdb", Some("/testdata_psql.sql"))
-
-  @Test
-  def loadTestData() {
-    val dataset = DbtDataset("/testdata.dbt")
-    loadData(dataset)
-
-    withConnection(db.connect()) { connection =>
-      withStatement(connection) { st =>
-        assertThat(
-          st.executeQuery("select count(1) from order_lines").map(_.getInt(1)).head,
-          is(dataset.rowSets.groupBy(_.tableName)("order_lines").map(_.rows.size).sum)
-        )
-      }
-    }
-  }
+  val db = SimpleDatabase("test", "test", "jdbc:postgresql:testdb", Some("/testdata_psql.sql"))
 }

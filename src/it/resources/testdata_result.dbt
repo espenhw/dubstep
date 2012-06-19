@@ -1,0 +1,13 @@
+customers:
+# In the results file, we don't care about the timestamps
+- id: 1, name: "Customer name"
+
+order_lines:
+? order_id: 1
+- id: 1, quantity: 1, description: "Singleton item", item_code: "SINGLETON"
+- id: 2, quantity: 2, description: "Items with no code"
+
+order_lines:
+? order_id: 2
+- id: 3, quantity: 1, description: "Singleton item", item_code: "SINGLETON"
+- id: 4, quantity: 2, description: "Items with no code"

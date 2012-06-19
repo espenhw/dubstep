@@ -17,27 +17,12 @@
 package test
 
 import org.grumblesmurf.dubstep._
-import org.grumblesmurf.dubstep.Utilities._
-import org.hamcrest.CoreMatchers._
-import org.junit.Assert.assertThat
-import org.junit.Test
 
-class H2Test {
+class H2Test extends DubstepTests {
+  implicit val db = H2Test.db
+}
+
+object H2Test {
   implicit val dbDialect = H2
-  implicit val db = SimpleDatabase("sa", "", "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1", Some("/testdata_h2.sql"))
-
-  @Test
-  def loadTestData() {
-    val dataset = DbtDataset("/testdata.dbt")
-    loadData(dataset)
-
-    withConnection(db.connect()) { connection =>
-      withStatement(connection) { st =>
-        assertThat(
-          st.executeQuery("select count(1) from order_lines").map(_.getInt(1)).head,
-          is(dataset.rowSets.groupBy(_.tableName)("order_lines").map(_.rows.size).sum)
-        )
-      }
-    }
-  }
+  val db = SimpleDatabase("sa", "", "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1", Some("/testdata_h2.sql"))
 }

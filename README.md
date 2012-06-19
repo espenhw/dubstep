@@ -11,7 +11,7 @@ class DatabaseUsingJunitTest {
   def aReallyStupidTestName() {
     loadData(DbtDataset("/predata.dbt"))
     // ... do stuff with the data ...
-    checkData(DbtDataset("/postdata.dbt"))  // NOT IMPLEMENTED YET
+    checkData(DbtDataset("/postdata.dbt")).map(x => fail(x.mkString("\n")))
   }
 }
 ```
@@ -30,12 +30,15 @@ binding you to its supported frameworks.
 
 Dubstep, on the other hand is small, lightweight, agnostic and explicit, and its native dataset syntax (shamelessly <del>stolen</del>
 borrowed from [scaladbtest](https://github.com/egervari/scaladbtest/)) is designed to minimize typing and maximize readability.
+And supporting more dataset formats is easy.
 
 ## So what does it do?
 
-Dubstep is centered around datasets.  A dataset has a reference to a data file (loaded as a classpath resource) and a database.
+Dubstep is centered around datasets.  A dataset has a reference to a data file (currently loaded as a classpath resource) and a database.
 A database, in turn, knows how to connect and knows its dialect (e.g. H2 or PostgreSQL); in addition, it can optionally
-have a reference to a schema definition (again, a classpath resource).
+have a reference to a schema definition (again, currently a classpath resource).
+
+### Loading data
 
 You can tell Dubstep to `org.grumblesmurf.dubstep.loadData(dataset)`.  That will:
 
@@ -45,9 +48,33 @@ You can tell Dubstep to `org.grumblesmurf.dubstep.loadData(dataset)`.  That will
 
 1.  Empty any tables referenced in the dataset.
 
-1.  Load the data.
+1.  Load the data, in the order defined in the dataset.
 
 1.  Update any autoincrement sequences to match the newly inserted data, if necessary.
+
+### Checking data
+
+After your code has run you can ask Dubstep to `org.grumblesmurf.dubstep.checkData(dataset)`.  That will:
+
+1.  Try to match the rows in the dataset with the ones in the database (using primary keys) and collect any mismatches.
+
+1.  Collect any rows in the dataset that don't have a matching row in the database.
+
+1.  Collect any rows in the database that don't have a matching row in the dataset.
+
+The collected mismatches are returned as an `Option[Iterable[Mismatch]]`.  You are then free to do what you wish with them.  One
+possible approach (using JUnit):
+
+```scala
+checkData(DbtDataset("/postdata.dbt")).map(mismatches => fail(mismatches.mkString("\n")))
+```
+
+More creatively (contrivedly?), using ScalaTest matches (and `OptionValues`):
+
+```scala
+// Verify that the code touched the customer name
+checkData(dataset).value must contain (RowDataMismatch(db.table("customers").get, Seq(42), Seq(ColumnMismatch("name", "Oldname", "Newname"))))
+```
 
 ## But....
 
@@ -64,18 +91,30 @@ You can tell Dubstep to `org.grumblesmurf.dubstep.loadData(dataset)`.  That will
 
   Yes!  Instantiate a `DataSourceDatabase` with it, and off you go.
 
-* Can Dubstep check database content too?
-
-  No, not yet.  But that is the next feature on the list...
-
 * Will Dubstep touch any tables not mentioned in the dataset?
 
-  No (well, apart from when reloading the schema). And when checking is implemented, it will only look at the tables you mention.
+  No, apart from when reloading the schema - and it will only do that if you tell it to (by giving it a schema definition).
+
+* How do I ignore columns when checking a dataset?
+
+  By not mentioning them.  Dubstep will only look at the columns you give it.  Compare `testdata.dbt` with
+  `testdata_result.dbt` in `src/it/resources` for an example.
 
 * Can Dubstep load/check multiple datasets?
 
   Of course!  Both `loadDataset` and `checkDataset` can take as many datasets as you care to throw at them (well, up to whatever
   limit Scala imposes on varargs).  And since each dataset knows what database it belongs to...
+
+* Dubstep falls over when loading my dataset!  The error message says something about foreign keys or referential integrity.
+
+  By design, Dubstep does not disable referential integrity checks while loading data; since you have complete control
+  over the insertion order it is not necessary.  To fix your problem, reorder the rows in your dataset (see
+  `src/it/resources/testdata.dbt` for an example)
+
+* Dubstep barfs while checking my dataset, complaining about a missing primary key!
+
+  Dubstep will cowardly refuse to check tables that do not have a primary key; there is no good way to match "corresponding"
+  rows between datasets in that case.  If this bothers you, feel free to implement...
 
 * What about support for other databases?
 
