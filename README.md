@@ -3,6 +3,9 @@
 ## A short example to whet your appetite
 
 ```scala
+import org.grumblesmurf.dubstep._
+import Utilities.cp // implicit conversion String -> Source from classpath resource
+
 class DatabaseUsingJunitTest {
   implicit val dbDialect = H2
   implicit val db = SimpleDatabase("sa", "", "jdbc:h2:mem:test;DB_CLOSE_DELAY=-1", Some("/testdb_schema.sql"))
@@ -34,9 +37,9 @@ And supporting more dataset formats is easy.
 
 ## So what does it do?
 
-Dubstep is centered around datasets.  A dataset has a reference to a data file (currently loaded as a classpath resource) and a database.
+Dubstep is centered around datasets.  A dataset has a reference to a data Source and a database.
 A database, in turn, knows how to connect and knows its dialect (e.g. H2 or PostgreSQL); in addition, it can optionally
-have a reference to a schema definition (again, currently a classpath resource).
+have a reference to a schema definition (again, a Source).
 
 ## Using Dubstep
 
