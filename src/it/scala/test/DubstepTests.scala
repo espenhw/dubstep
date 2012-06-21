@@ -33,7 +33,7 @@ abstract class DubstepTests {
     withConnection(db.connect()) { connection =>
       withStatement(connection) { st =>
         assertThat(
-          st.executeQuery("select count(1) from order_lines").map(_.getInt(1)).head,
+          st.executeQuery("select count(1) from " + db.table("order_lines").get.qualifiedName).map(_.getInt(1)).head,
           is(dataset.rowSets.groupBy(_.tableName)("order_lines").map(_.rows.size).sum)
         )
       }

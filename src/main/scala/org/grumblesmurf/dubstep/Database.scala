@@ -49,7 +49,7 @@ sealed abstract class Database {
   }
 
   private def checkTable(table: Table, expectedRows: Seq[Row], actualRows: Seq[Row]): Iterable[Mismatch] = {
-    val pk = table.primaryKey.getOrElse(throw new IllegalArgumentException("Dubstep cannot check %s, it has no primary key" format (table.name)))
+    val pk = table.primaryKey.getOrElse(throw new IllegalArgumentException("Dubstep cannot check %s, it has no primary key" format (table.qualifiedName)))
     def pkValues(row: Row) = {
       pk.map(row(_))
     }
@@ -96,7 +96,7 @@ sealed abstract class Database {
   private def loadRows(connection: Connection, tables: Iterable[String]): Map[String, Seq[Row]] = {
     withStatement(connection) { st =>
       Map.empty ++ tables.map { t =>
-        (t -> st.executeQuery("SELECT * FROM " + t).map { rs =>
+        (t -> st.executeQuery("SELECT * FROM " + meta.table(t).qualifiedName).map { rs =>
           val rsMeta = rs.getMetaData
           val cols = rsMeta.getColumnCount
 
@@ -117,8 +117,9 @@ sealed abstract class Database {
 
       val affectedTables = dataset.rowSets.map(rs => meta.table(rs.tableName))
 
-      val inserts: Map[String, PreparedStatement] = Map.empty ++ (affectedTables map { table =>
-        (table.name -> connection.prepareStatement(table.insertStatement))
+      val inserts: Map[String, PreparedStatement] = Map.empty ++ (affectedTables flatMap { table =>
+        val ps = connection.prepareStatement(table.insertStatement)
+        Map(table.qualifiedName -> ps, table.name -> ps)
       })
 
       inTransaction(connection) {
@@ -144,35 +145,36 @@ sealed abstract class Database {
 
   private def interpretMetadata(dmd: DatabaseMetaData): DatabaseStructure = {
     val realTables = dmd.getTables(null, null, "%", Array("TABLE")).map { rs: ResultSet =>
-      rs.getString("TABLE_NAME")
+      (rs.getString("TABLE_NAME"), rs.getString("TABLE_SCHEM"))
     }.toSet
 
-    val primaryKeys: Map[String, Seq[String]] = realTables.map { table =>
-      val pkCols = dmd.getPrimaryKeys(null, null, table).map {
+    val primaryKeys: Map[(String,String), Seq[String]] = realTables.map { case (table, schema) =>
+      val pkCols = dmd.getPrimaryKeys(null, schema, table).map {
         rs =>
           val seq = rs.getInt("KEY_SEQ")
           val col = rs.getString("COLUMN_NAME").toLowerCase
           (seq -> col)
       }
-      table -> (pkCols.toSeq.sortBy(_._1).map(_._2))
+      (table, schema) -> (pkCols.toSeq.sortBy(_._1).map(_._2))
     }.toMap
 
     val tableColumns = dmd.getColumns(null, null, "%", "%").flatMap { rs =>
       val table = rs.getString("TABLE_NAME")
-      if (realTables(table)) {
+      val schema = rs.getString("TABLE_SCHEM")
+      if (realTables((table, schema))) {
         val column = rs.getString("COLUMN_NAME").toLowerCase
         val sqlType = rs.getInt("DATA_TYPE")
         val isAutoIncrement = rs.getString("IS_AUTOINCREMENT") == "YES"
-        Some(table -> (column -> (sqlType, isAutoIncrement)))
+        Some((table, schema) -> (column -> (sqlType, isAutoIncrement)))
       } else {
         None
       }
-    }.groupBy(_._1) map { case (table, cols) =>
-      (table -> (Map.empty ++ (cols map { _._2 })))
+    }.groupBy(_._1) map { case ((table, schema), cols) =>
+      ((table, schema) -> (Map.empty ++ (cols map { _._2 })))
     }
 
-    val tables = realTables.map { table =>
-      Table(table.toLowerCase, primaryKeys.get(table), tableColumns(table))
+    val tables = realTables.map { t =>
+      Table(t._1.toLowerCase, Option(t._2), primaryKeys.get(t), tableColumns(t))
     }
 
     DatabaseStructure(tables)
@@ -212,18 +214,20 @@ sealed abstract class Database {
   def connect(): Connection
 }
 
-case class Table(name: String, primaryKey: Option[Seq[String]], columns: Map[String, (Int, Boolean)]) {
+case class Table(name: String, schema: Option[String], primaryKey: Option[Seq[String]], columns: Map[String, (Int, Boolean)]) {
+  lazy val qualifiedName = schema.map(_ + ".").getOrElse("")+name
+
   lazy val autoIncrementColumns = columns.collect { case (column, (_, true)) => column }.toSet
 
   lazy val insertStatement = "insert into %s (%s) values (%s)" format (
-    name,
+    qualifiedName,
     columns.keys mkString ",",
     columns map Function.const("?") mkString ","
     )
 }
 
 case class DatabaseStructure(tables: Set[Table]) {
-  private val tableMap = Map.empty ++ tables.map { t => t.name -> t}
+  private val tableMap = Map.empty ++ tables.flatMap { t => Map(t.name -> t, t.qualifiedName -> t) }
 
   def table(name: String): Table = {
     tableMap.get(name).getOrElse(throw new IllegalArgumentException("Table " + name + " does not exist"))

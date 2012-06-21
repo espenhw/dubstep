@@ -30,7 +30,7 @@ sealed abstract class Mismatch {
       |%s
     """.stripMargin.format(
       getClass.getSimpleName,
-      table.name,
+      table.qualifiedName,
       table.primaryKey.map(_.zip(primaryKeyValues).toMap).getOrElse(Map.empty).map(colValue).mkString(", "),
       toStringExtra
     ).trim

@@ -47,7 +47,7 @@ abstract class DatabaseDialect {
   def clearDatabase(connection: Connection, meta: DatabaseStructure) {
     if (meta.tables.nonEmpty) {
       withStatement(connection) { st =>
-        st.execute("DROP TABLE %s CASCADE" format (meta.tables.map(_.name).mkString(",")))
+        st.execute("DROP TABLE %s CASCADE" format (meta.tables.map(_.qualifiedName).mkString(",")))
       }
     }
   }
@@ -66,7 +66,7 @@ abstract class NaiveDatabaseDialect extends DatabaseDialect {
   def truncateTables(tables: Seq[Table], connection: Connection, meta: DatabaseStructure) {
     withStatement(connection) { st =>
       tables foreach { t =>
-        st.executeUpdate("DELETE FROM " + t.name)
+        st.executeUpdate("DELETE FROM " + t.qualifiedName)
       }
     }
   }
@@ -101,7 +101,7 @@ object H2 extends NaiveDatabaseDialect {
     withStatement(connection) { st =>
       tables foreach { t =>
         t.autoIncrementColumns foreach { c =>
-          st.executeUpdate("ALTER TABLE %1$s ALTER COLUMN %2$s RESTART WITH %3$d" format(t.name, c, nextValue(st, t.name, c)))
+          st.executeUpdate("ALTER TABLE %1$s ALTER COLUMN %2$s RESTART WITH %3$d" format(t.qualifiedName, c, nextValue(st, t.qualifiedName, c)))
         }
       }
     }
@@ -123,7 +123,7 @@ object PostgreSQL extends DatabaseDialect {
 
   def truncateTables(tables: Seq[Table], connection: Connection, meta: DatabaseStructure) {
     withStatement(connection) { st =>
-      st.executeUpdate("TRUNCATE TABLE %s RESTART IDENTITY" format (tables.map(_.name) mkString ","))
+      st.executeUpdate("TRUNCATE TABLE %s RESTART IDENTITY" format (tables.map(_.qualifiedName) mkString ","))
     }
   }
 
@@ -131,8 +131,17 @@ object PostgreSQL extends DatabaseDialect {
     withStatement(connection) { st =>
       tables foreach { t =>
         t.autoIncrementColumns foreach { c =>
-          st.execute("SELECT pg_catalog.setval(pg_get_serial_sequence('%1$s', '%2$s'), (SELECT MAX(%2$s) FROM %1$s))" format(t.name, c))
+          st.execute("SELECT pg_catalog.setval(pg_get_serial_sequence('%1$s', '%2$s'), (SELECT MAX(%2$s) FROM %1$s))" format(t.qualifiedName, c))
         }
+      }
+    }
+  }
+
+  override def clearDatabase(connection: Connection, meta: DatabaseStructure) {
+    super.clearDatabase(connection, meta)
+    withStatement(connection) { st =>
+      meta.tables.flatMap(_.schema).foreach { s =>
+        st.execute("DROP SCHEMA " + s)
       }
     }
   }
