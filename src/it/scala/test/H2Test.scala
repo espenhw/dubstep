@@ -17,6 +17,7 @@
 package test
 
 import org.grumblesmurf.dubstep._
+import Utilities.cp
 
 class H2Test extends DubstepTests {
   implicit val db = H2Test.db

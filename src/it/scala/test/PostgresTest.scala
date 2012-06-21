@@ -17,7 +17,7 @@
 package test
 
 import org.grumblesmurf.dubstep._
-
+import Utilities.cp
 
 class PostgresTest extends DubstepTests {
   implicit val db = PostgresTest.db

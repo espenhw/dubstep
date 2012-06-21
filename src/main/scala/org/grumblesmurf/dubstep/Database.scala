@@ -19,13 +19,13 @@ package org.grumblesmurf.dubstep
 import java.sql.{Array => _, _}
 import javax.sql.DataSource
 import Utilities._
-import org.apache.commons.io.IOUtils
 import scala.collection.mutable
+import scala.io.Source
 
 sealed abstract class Database {
   val dialect: DatabaseDialect
 
-  val schemaDefinition: Option[String]
+  val schemaDefinition: Option[Source]
 
   private[this] var schemaLoaded = false
 
@@ -183,8 +183,8 @@ sealed abstract class Database {
   private def loadSchema(connection: Connection) {
     dialect.clearDatabase(connection, interpretMetadata(connection.getMetaData))
 
-    schemaDefinition foreach { resource =>
-      val sql = loadAsString(resource)
+    schemaDefinition foreach { source =>
+      val sql = loadAsString(source)
       withStatement(connection) { s =>
         s.execute(sql)
       }
@@ -202,12 +202,11 @@ sealed abstract class Database {
     Option(meta).map(_.table(name))
   }
 
-  private def loadAsString(resource: String): String = {
-    val is = getClass.getResourceAsStream(resource)
+  private def loadAsString(source: Source): String = {
     try {
-      IOUtils.toString(is, "UTF-8")
+      source.getLines().mkString("\n")
     } finally {
-      is.close()
+      source.close()
     }
   }
 
@@ -234,7 +233,7 @@ case class DatabaseStructure(tables: Set[Table]) {
   }
 }
 
-case class SimpleDatabase(username: String, password: String, uri: String, schemaDefinition: Option[String] = None)
+case class SimpleDatabase(username: String, password: String, uri: String, schemaDefinition: Option[Source] = None)
                          (implicit val dialect: DatabaseDialect) extends Database {
   Class.forName(dialect.driverClassname)
 
@@ -243,7 +242,7 @@ case class SimpleDatabase(username: String, password: String, uri: String, schem
   }
 }
 
-case class DataSourceDatabase(dataSource: DataSource, schemaDefinition: Option[String] = None)
+case class DataSourceDatabase(dataSource: DataSource, schemaDefinition: Option[Source] = None)
                              (implicit val dialect: DatabaseDialect) extends Database {
   def connect(): Connection = {
     dataSource.getConnection
