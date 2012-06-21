@@ -1,4 +1,4 @@
-# Dubstep - Framework-agnostic test data loading for Scala
+# Dubstep - Framework-agnostic database testing for Scala
 
 ## A short example to whet your appetite
 
@@ -59,9 +59,9 @@ You can then `import org.grumblesmurf.dubstep._`.
 
 You can tell Dubstep to `loadData(dataset)`.  That will:
 
-1.  Check the whether dataset's database has had its schema loaded (if it has one).  If not, it will drop all tables in
-    the database and load the supplied schema definition.  Incidentally, this is remembered by the database object - thus,
-    if you arrange to share the database object between your tests the schema will only be reloaded once.
+1.  Check the whether dataset's database has had its schema loaded (if it has one).  If not, it will drop *all* tables in
+    the database and load the supplied schema definition.  Incidentally, this is remembered by the database instance - thus,
+    if you arrange to share the database instance between your tests the schema will only be reloaded once.
 
 1.  Empty any tables referenced in the dataset.
 
@@ -125,7 +125,7 @@ checkData(dataset).value must contain (RowDataMismatch(db.table("customers").get
 * Dubstep falls over when loading my dataset!  The error message says something about foreign keys or referential integrity.
 
   By design, Dubstep does not disable referential integrity checks while loading data; since you have complete control
-  over the insertion order it is not necessary.  To fix your problem, reorder the rows in your dataset (see
+  over the insertion order it is not necessary to do so.  To fix your problem, reorder the rows in your dataset (see
   `src/it/resources/testdata.dbt` for an example)
 
 * Dubstep barfs while checking my dataset, complaining about a missing primary key!
@@ -136,7 +136,11 @@ checkData(dataset).value must contain (RowDataMismatch(db.table("customers").get
 * What about support for other databases?
 
   You can easily implement your own `DatabaseDialect`; as a starting point, extend `NaiveDatabaseDialect` and define `driverClassname`.
-  If you do this, feel free to send me your code for inclusion.
+  If you do this, please send me your code for inclusion.
+
+* Help!  I don't understand the dataset format!
+
+  See [the summary documentation](#dbtdoc).
 
 * This is cool, can I help?
 
@@ -147,7 +151,7 @@ checkData(dataset).value must contain (RowDataMismatch(db.table("customers").get
 ## Building Dubstep
 
 For the integration tests to pass you need a local PostgreSQL database named `testdb` where a user named `test` has access
-with password `test`.  I know, very imaginative.  Then run:
+with password `test`; it requires CREATE privileges in order to create the schema.  I know, very imaginative.  Then run:
 
 ```
 ./sbt test it:test +publish-local
@@ -156,6 +160,34 @@ with password `test`.  I know, very imaginative.  Then run:
 to publish Dubstep to your local Ivy cache, built for stable Scala versions 2.8.1 and up.
 
 You can now refer to `"org.grumblesmurf" %% "dubstep" % "0.1-SNAPSHOT"` in your SBT build definition.
+
+## <a id="dbtdoc"></a>The DBT format
+
+Dubstep implements most of the DBT format as documented [in scaladbtest](https://github.com/egervari/scaladbtest#dbt-usage), with two differences:
+
+### 1. Labels are not supported (if you need/want them, let me know)
+
+### 2.  A new syntax for "global/remembered defaults" is provided:
+
+```
+master:
+?? static_column: "value"
+- id: 1, name: "foo"
+
+child:
+- id: 1, master_id: 1
+
+master:
+- id: 2, name: "bar"
+```
+
+When inserting/checking this dataset, Dubstep will remember that `static_column` should have the value `"value"` even
+for the second set of rows.  This is especially useful during data load if you have non-nullable timestamp columns in your schema:
+
+```
+table:
+?? inserted: $now, updated: $now
+```
 
 ## Boring legal stuff
 

@@ -19,6 +19,7 @@ package org.grumblesmurf.dubstep
 import scala.util.parsing.combinator.JavaTokenParsers
 import java.sql.Timestamp
 import scala.io.Source
+import scala.collection.mutable
 
 abstract class Dataset {
   def rowSets: Seq[RowSet]
@@ -31,7 +32,11 @@ case class RowSet(tableName: String, defaults: Option[Row], rows: Seq[Row])
 case class Row(data: Map[String, Any]) {
   def withDefaultsFrom(rowSet: RowSet): Row = {
     val defaultData: Map[String, Any] = rowSet.defaults.map(_.data).getOrElse(Map.empty)
-    copy(data=defaultData ++ data)
+    withDefaultsFromMap(defaultData)
+  }
+
+  private[dubstep] def withDefaultsFromMap(defaultData: Map[String, Any]): Row = {
+    copy(data = defaultData ++ data)
   }
 
   def apply(column: String): Any = {
@@ -56,10 +61,18 @@ case class DbtDataset(dataSource: Source)(implicit val database: Database) exten
 object DbtParser extends JavaTokenParsers {
   private def tables: Parser[Seq[RowSet]] = rep(table)
 
-  private def table: Parser[RowSet] = ident ~ ":" ~ opt(defaults) ~ rep(record) ^^ {
-    case name ~ ":" ~ defs ~ rows =>
-      RowSet(name.toLowerCase, defs, rows)
+  private val globals = mutable.Map.empty[String,Map[String,Any]].withDefaultValue(Map.empty)
+
+  private def table: Parser[RowSet] = ident ~ ":" ~ opt(globalDefaults) ~ opt(defaults) ~ rep(record) ^^ {
+    case name ~ ":" ~ globalDefs ~ defs ~ rows =>
+      globalDefs.map(r => globals.update(name, r.data))
+
+      val defaults = defs.map(_.withDefaultsFromMap(globals(name)))
+        .orElse(globals.get(name).map(Row(_)))
+      RowSet(name.toLowerCase, defaults, rows)
   }
+
+  private def globalDefaults: Parser[Row] = row("??")
 
   private def defaults: Parser[Row] = row("?")
 
