@@ -16,10 +16,15 @@
 
 package org.grumblesmurf.dubstep
 
-import java.sql.{Timestamp, ResultSet, Statement, Connection}
+import java.sql.{ResultSet, Statement, Connection}
 import scala.collection.mutable
+import scala.io.Source
 
 object Utilities {
+  implicit def cp(resource: String): Source = {
+    Source.fromInputStream(getClass.getResourceAsStream(resource), "UTF-8")
+  }
+
   /** Calls `fn` with `connection`. `connection` will be closed after `fn` completes.
     *
     * @param connection the Connection to use

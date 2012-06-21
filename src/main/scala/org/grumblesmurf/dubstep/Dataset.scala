@@ -24,7 +24,6 @@ abstract class Dataset {
   def rowSets: Seq[RowSet]
 
   val database: Database
-  val dataFile: String
 }
 
 case class RowSet(tableName: String, defaults: Option[Row], rows: Seq[Row])
@@ -44,13 +43,12 @@ case class Row(data: Map[String, Any]) {
   }
 }
 
-case class DbtDataset(dataFile: String)(implicit val database: Database) extends Dataset {
-  def rowSets: Seq[RowSet] = {
-    val is = getClass.getResourceAsStream(dataFile)
+case class DbtDataset(dataSource: Source)(implicit val database: Database) extends Dataset {
+  lazy val rowSets: Seq[RowSet] = {
     try {
-      DbtParser.parse(Source.fromInputStream(is, "UTF-8"))
+      DbtParser.parse(dataSource)
     } finally {
-      is.close()
+      dataSource.close()
     }
   }
 }
