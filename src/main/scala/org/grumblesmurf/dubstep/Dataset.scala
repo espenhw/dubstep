@@ -61,13 +61,13 @@ case class DbtDataset(dataSource: Source)(implicit val database: Database) exten
 object DbtParser extends JavaTokenParsers {
   private def tables: Parser[Seq[RowSet]] = rep(table)
 
-  private val globals = mutable.Map.empty[String,Map[String,Any]].withDefaultValue(Map.empty)
+  private val globals = mutable.Map.empty[String,Map[String,Any]]
 
   private def table: Parser[RowSet] = ident ~ ":" ~ opt(globalDefaults) ~ opt(defaults) ~ rep(record) ^^ {
     case name ~ ":" ~ globalDefs ~ defs ~ rows =>
       globalDefs.map(r => globals.update(name, r.data))
 
-      val defaults = defs.map(_.withDefaultsFromMap(globals(name)))
+      val defaults = defs.map(_.withDefaultsFromMap(globals.getOrElse(name, Map.empty)))
         .orElse(globals.get(name).map(Row(_)))
       RowSet(name.toLowerCase, defaults, rows)
   }
