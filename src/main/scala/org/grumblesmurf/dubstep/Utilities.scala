@@ -17,7 +17,6 @@
 package org.grumblesmurf.dubstep
 
 import java.sql.{ResultSet, Statement, Connection}
-import scala.collection.mutable
 import scala.io.Source
 
 object Utilities {
@@ -76,7 +75,7 @@ object Utilities {
   implicit def wrapResultSet(rs: ResultSet): RichResultSet = new RichResultSet(rs)
 }
 
-class RichResultSet(rs: ResultSet) extends mutable.Traversable[ResultSet] {
+class RichResultSet(rs: ResultSet) extends Traversable[ResultSet] {
   def foreach[U](f: (ResultSet) => U) {
     try {
       while (rs.next()) {
