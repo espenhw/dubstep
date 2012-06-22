@@ -101,7 +101,7 @@ object H2 extends NaiveDatabaseDialect {
     withStatement(connection) { st =>
       tables foreach { t =>
         t.autoIncrementColumns foreach { c =>
-          st.executeUpdate("ALTER TABLE %1$s ALTER COLUMN %2$s RESTART WITH %3$d" format(t.qualifiedName, c, nextValue(st, t.qualifiedName, c)))
+          st.executeUpdate("ALTER TABLE %1$s ALTER COLUMN \"%2$s\" RESTART WITH %3$d" format(t.qualifiedName, c, nextValue(st, t.qualifiedName, c)))
         }
       }
     }
@@ -113,7 +113,7 @@ object H2 extends NaiveDatabaseDialect {
     */
   override def updateAutoincrements(tables: Seq[Table], connection: Connection, meta: DatabaseStructure) {
     updateAutoincrementColumns(connection, tables, meta) { (st, table, column) =>
-      st.executeQuery("SELECT MAX(%2$s) + 1 FROM %1$s" format (table, column)).map(_.getLong(1)).head
+      st.executeQuery("SELECT MAX(\"%2$s\") + 1 FROM %1$s" format (table, column)).map(_.getLong(1)).head
     }
   }
 }
@@ -131,7 +131,7 @@ object PostgreSQL extends DatabaseDialect {
     withStatement(connection) { st =>
       tables foreach { t =>
         t.autoIncrementColumns foreach { c =>
-          st.execute("SELECT pg_catalog.setval(pg_get_serial_sequence('%1$s', '%2$s'), (SELECT MAX(%2$s) FROM %1$s))" format(t.qualifiedName, c))
+          st.execute("SELECT pg_catalog.setval(pg_get_serial_sequence('%1$s', '%2$s'), (SELECT MAX(\"%2$s\") FROM %1$s))" format(t.qualifiedName, c))
         }
       }
     }
@@ -141,7 +141,7 @@ object PostgreSQL extends DatabaseDialect {
     super.clearDatabase(connection, meta)
     withStatement(connection) { st =>
       meta.tables.flatMap(_.schema).foreach { s =>
-        st.execute("DROP SCHEMA " + s)
+        st.execute("DROP SCHEMA " + s + " CASCADE")
       }
     }
   }

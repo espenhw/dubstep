@@ -1,5 +1,5 @@
-create table customers (
-  id identity primary key,
+create table "customers" (
+  "id" identity primary key,
   name varchar(255) not null,
   created timestamp not null,
   updated timestamp not null
@@ -7,7 +7,7 @@ create table customers (
 
 create table orders (
   id identity primary key,
-  customer_id integer not null references customers(id),
+  "customer_id" integer not null references "customers" ("id"),
   created timestamp not null
 );
 

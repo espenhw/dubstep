@@ -51,7 +51,8 @@ sealed abstract class Database {
   private def checkTable(table: Table, expectedRows: Seq[Row], actualRows: Seq[Row]): Iterable[Mismatch] = {
     val pk = table.primaryKey.getOrElse(throw new IllegalArgumentException("Dubstep cannot check %s, it has no primary key" format (table.qualifiedName)))
     def pkValues(row: Row) = {
-      pk.map(row(_))
+      pk.map(c => row.get(c).getOrElse(row.get(c.toLowerCase)
+        .getOrElse(throw new IllegalArgumentException("Primary key column %s not defined in %s row %s" format (c, table.name, row)))))
     }
 
     val mismatches = mutable.Buffer.empty[Mismatch]
@@ -119,7 +120,9 @@ sealed abstract class Database {
 
       val inserts: Map[String, PreparedStatement] = Map.empty ++ (affectedTables flatMap { table =>
         val ps = connection.prepareStatement(table.insertStatement)
-        Map(table.qualifiedName -> ps, table.name -> ps)
+        Seq(table.qualifiedName, table.name) flatMap { n =>
+          Map(n -> ps, n.toLowerCase -> ps)
+        }
       })
 
       inTransaction(connection) {
@@ -133,8 +136,9 @@ sealed abstract class Database {
             val augmentedRow = row.withDefaultsFrom(rowSet)
 
             meta.table(rowSet.tableName).columns.zipWithIndex.foreach { case ((column, (sqlType, _)), idx) =>
-                ps.setObject(idx + 1, augmentedRow.get(column).orNull, sqlType)
-              }
+              val value = augmentedRow.get(column).orElse(augmentedRow.get(column.toLowerCase)).orNull
+              ps.setObject(idx + 1, value, sqlType)
+            }
             ps.executeUpdate()
           }
         }
@@ -152,7 +156,7 @@ sealed abstract class Database {
       val pkCols = dmd.getPrimaryKeys(null, schema, table).map {
         rs =>
           val seq = rs.getInt("KEY_SEQ")
-          val col = rs.getString("COLUMN_NAME").toLowerCase
+          val col = rs.getString("COLUMN_NAME")
           (seq -> col)
       }
       (table, schema) -> (pkCols.toSeq.sortBy(_._1).map(_._2))
@@ -162,7 +166,7 @@ sealed abstract class Database {
       val table = rs.getString("TABLE_NAME")
       val schema = rs.getString("TABLE_SCHEM")
       if (realTables((table, schema))) {
-        val column = rs.getString("COLUMN_NAME").toLowerCase
+        val column = rs.getString("COLUMN_NAME")
         val sqlType = rs.getInt("DATA_TYPE")
         val isAutoIncrement = rs.getString("IS_AUTOINCREMENT") == "YES"
         Some((table, schema) -> (column -> (sqlType, isAutoIncrement)))
@@ -174,7 +178,7 @@ sealed abstract class Database {
     }
 
     val tables = realTables.map { t =>
-      Table(t._1.toLowerCase, Option(t._2), primaryKeys.get(t), tableColumns(t))
+      Table(t._1, Option(t._2), primaryKeys.get(t), tableColumns(t))
     }
 
     DatabaseStructure(tables)
@@ -214,13 +218,13 @@ sealed abstract class Database {
 }
 
 case class Table(name: String, schema: Option[String], primaryKey: Option[Seq[String]], columns: Map[String, (Int, Boolean)]) {
-  lazy val qualifiedName = schema.map(_ + ".").getOrElse("")+name
+  lazy val qualifiedName = "%s\"%s\"" format (schema.map(_ + ".").getOrElse(""), name)
 
   lazy val autoIncrementColumns = columns.collect { case (column, (_, true)) => column }.toSet
 
   lazy val insertStatement = "insert into %s (%s) values (%s)" format (
     qualifiedName,
-    columns.keys mkString ",",
+    columns.keys.toSeq map (_ formatted "\"%s\"") mkString ",",
     columns map Function.const("?") mkString ","
     )
 }
@@ -229,7 +233,7 @@ case class DatabaseStructure(tables: Set[Table]) {
   private val tableMap = Map.empty ++ tables.flatMap { t => Map(t.name -> t, t.qualifiedName -> t) }
 
   def table(name: String): Table = {
-    tableMap.get(name).getOrElse(throw new IllegalArgumentException("Table " + name + " does not exist"))
+    tableMap.get(name).getOrElse(tableMap.getOrElse(name.toUpperCase, throw new IllegalArgumentException("Table " + name + " does not exist")))
   }
 }
 
