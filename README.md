@@ -48,7 +48,7 @@ have a reference to a schema definition (again, a Source).
 In your SBT build descriptor:
 
 ```
-resolvers += Resolver.url("grumblesmurf", url("http://maven.grumblesmurf.org/"))(Resolver.ivyStylePatterns)
+resolvers += Resolver.url("grumblesmurf", url("http://maven.grumblesmurf.org/"))
 
 libraryDependencies += "org.grumblesmurf" %% "dubstep" % "0.1-SNAPSHOT" % "it" // Or "test"
 ```
