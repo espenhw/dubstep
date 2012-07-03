@@ -102,7 +102,12 @@ sealed abstract class Database {
           val cols = rsMeta.getColumnCount
 
           Row(Map.empty ++ (1 until (cols + 1)).map { n =>
-            (rsMeta.getColumnName(n).toLowerCase -> rs.getObject(n))
+            val v = rs.getObject(n) match {
+              case ts: Timestamp => ts.toString
+              case d: java.sql.Date => d.toString
+              case x => x
+            }
+            (rsMeta.getColumnName(n).toLowerCase -> v)
           })
         }.toSeq)
       }
