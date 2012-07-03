@@ -64,6 +64,6 @@ case class ExtraRow(table: Table, primaryKeyValues: Seq[Any], moreColumns: Map[S
 }
 
 case class ColumnMismatch(column: String, expected: Any, actual: Any) {
-  protected def humanReadable: String = "  column %s: expected %s got %s" format (
+  override def toString: String = "  column %s: expected %s got %s" format (
     column, Mismatch.formattedValue(expected), Mismatch.formattedValue(actual))
 }
