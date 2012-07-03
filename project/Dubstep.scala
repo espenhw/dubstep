@@ -32,8 +32,10 @@ object Dubstep extends Build {
       (testOptions in IntegrationTest) += Tests.Argument(TestFrameworks.JUnit, "-v"),
       (parallelExecution in IntegrationTest) := false,
       publishTo := Some(Resolver.ssh("maven.grumblesmurf.org",
-        "maven.grumblesmurf.org", "/srv/www/maven.grumblesmurf.org/htdocs")(Resolver.ivyStylePatterns)
-        as("espenhw", file(System.getProperty("user.home")) / ".ssh" / "id_rsa_espenhw@grumblesmurf.org"))
+        "maven.grumblesmurf.org", "/srv/www/maven.grumblesmurf.org/htdocs")
+        withPermissions("0644")
+        as("espenhw", file(System.getProperty("user.home")) / ".ssh" / "id_rsa_espenhw@grumblesmurf.org")
+        )
     ) : _*)
 
 
