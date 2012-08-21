@@ -27,9 +27,27 @@ abstract class Dataset {
   val database: Database
 }
 
-case class RowSet(tableName: String, defaults: Option[Row], rows: Seq[Row])
+case class RowSet(tableName: String, defaults: Option[Row], rows: Seq[Row]) {
+  def asDbt = {
+    """%s:
+      |%s
+    """.stripMargin.trim format (tableName, (defaults.map(_.asDbt("?")) ++ rows.map(_.asDbt("-"))).mkString("\n"))
+  }
+}
 
 case class Row(data: Map[String, Any]) {
+  def asDbt(prefix: String) = {
+    def escape(s: String) = s.replace("\\", "\\\\").replace("\"", "\\\"")
+
+    data.map {
+      case (key, value) =>
+        "%s: %s" format (key, value match {
+          case s: String => "\"" + escape(s) + "\""
+          case x => x
+        })
+    } mkString(prefix + " ", ", ", "")
+  }
+
   def withDefaultsFrom(rowSet: RowSet): Row = {
     val defaultData: Map[String, Any] = rowSet.defaults.map(_.data).getOrElse(Map.empty)
     withDefaultsFromMap(defaultData)
