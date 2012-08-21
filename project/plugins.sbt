@@ -1,3 +1,6 @@
-resolvers += Resolver.url("artifactory", url("http://scalasbt.artifactoryonline.com/scalasbt/sbt-plugin-snapshots"))(Resolver.ivyStylePatterns)
+resolvers += Resolver.url(
+  "sbt-plugin-releases",
+  new URL("http://scalasbt.artifactoryonline.com/scalasbt/sbt-plugin-releases/")
+)(Resolver.ivyStylePatterns)
 
-addSbtPlugin("com.github.gseitz" % "sbt-release" % "0.5-SNAPSHOT")
+addSbtPlugin("com.github.gseitz" % "sbt-release" % "0.5")
